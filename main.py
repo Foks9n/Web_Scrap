@@ -1,44 +1,74 @@
 import requests
 from bs4 import BeautifulSoup
 import fake_headers
-from pprint import pprint
+import json
 
-KEYWORDS = ['дизайн', 'фото', 'web', 'python']
+KEYWORDS = ["Django", "Flask", "SQL"]
+vacancy_data = 'vacancy_data.json'
 headers_gen = fake_headers.Headers(browser='chrome', os='win')
 
-HOST = 'https://habr.com'
-habr_url = f'{HOST}/ru/all/'
+HOST = 'https://spb.hh.ru'
+page = int(input('Укажите необходимое колличество страниц для обработки по поиску подходящих вакансий: '))
 
-response = requests.get(habr_url, headers=headers_gen.generate())
-response_text = response.text
-
-soup = BeautifulSoup(response_text, features='lxml')
-article_list_tag = soup.find('div', class_='tm-articles-list')
-article_tags = article_list_tag.find_all('article')
-
+start_page = 0
 articles_parsed = []
-for article_tag in article_tags:
-    header_tag = article_tag.find('h2')
-    a_tag = header_tag.find('a')
+while page > start_page:
+    print(f'Обрабатывается {start_page + 1} страница hh.ru.')
+    params = {
+        'text': 'python',
+        'area': 2,
+        'area': 1,
+        'items_on_page': 20,
+        'page': start_page
+    }
+    
+    response = requests.get('https://spb.hh.ru/search/vacancy?',params=params, headers=headers_gen.generate())
+    response_text = response.text
 
-    time_tag = article_tag.find('time')
-    publication_time = time_tag['datetime']
+    soup = BeautifulSoup(response_text, features='lxml')
+    article_list_tag = soup.find('div', {'data-qa': "vacancy-serp__results"})
+    try:
+        article_tags = article_list_tag.find_all('div',class_="vacancy-serp-item__layout")
+    except:
+        break
 
-    header_text = header_tag.text
-    link = a_tag['href']
-    publication_link = f'{HOST}{link}'
+    for article_tag in article_tags:
+        a_tag = article_tag.find('a')
 
-    article_response = requests.get(publication_link, headers=headers_gen.generate())
-    article = BeautifulSoup(article_response.text, 'lxml')
-    article_body_tag = article.find('div', id='post-content-body')
-    article_body_text = article_body_tag.text
+        try:
+            salary = article_tag.find('span', class_="bloko-header-section-2").text
+        except:
+            salary = 'Не указана'
 
-    for word in KEYWORDS:
-        if word in article_body_text:
-            articles_parsed.append({
-    'publication_time': publication_time,
-    'header': header_text,
-    'link': publication_link
-})
-            
-pprint(articles_parsed)
+        company_name = article_tag.find('a', class_='bloko-link bloko-link_kind-tertiary').text
+
+        link = a_tag['href']
+
+        adress = article_tag.find('div', {'data-qa': "vacancy-serp__vacancy-address"}).text
+
+        article_response = requests.get(link, headers=headers_gen.generate())
+        article = BeautifulSoup(article_response.text, 'lxml')
+        
+        try:
+            description = article.find('div', class_='g-user-content').text
+        except:
+            description = 'None'
+
+        for word in KEYWORDS:
+            # if word in description and '$' in salary:  функция поиска по ЗП в долларах
+            if word in description:
+                articles_parsed.append({
+        'link': link,
+        'salary': salary,
+        'company_name': company_name,
+        'adress': adress
+    })
+    start_page += 1
+
+print(f'Полученные данные записываются в файл {vacancy_data}.')
+
+with open(vacancy_data, 'w', encoding='utf-8') as f:
+    file = json.dumps(articles_parsed, indent=2, ensure_ascii=False)
+    f.write(file)
+
+print(f'Данные о вакансиях успешно записаны в {vacancy_data}.')
