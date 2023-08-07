@@ -63,6 +63,7 @@ while page > start_page:
         'company_name': company_name,
         'adress': adress
     })
+                break
     start_page += 1
 
 print(f'Полученные данные записываются в файл {vacancy_data}.')
